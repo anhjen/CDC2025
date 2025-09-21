@@ -8,16 +8,22 @@ from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 import plotly.express as px
 
-# Import our visual components conditionally
+# conditional imports
 try:
-    from visual import create_us_states_map, create_state_details_card, display_us_stats
+    from visual import (
+        create_us_states_map, 
+        create_state_details_card, 
+        display_us_stats,
+        create_world_astronaut_map,
+        create_country_details_card
+    )
     VISUAL_AVAILABLE = True
 except ImportError as e:
     st.warning(f"Visual components not available: {e}")
     VISUAL_AVAILABLE = False
 
 def load_international_performance():
-    """Load international model performance metrics."""
+    """international model performance metrics."""
     try:
         import joblib
         from pathlib import Path
@@ -29,16 +35,6 @@ def load_international_performance():
             return None
     except Exception:
         return None
-
-# --- Utility function to convert 'Total Flight Time (ddd:hh:mm)' to total hours ---
-def ddd_hh_mm_to_hours(time_str):
-    if pd.isnull(time_str):
-        return 0
-    try:
-        d, h, m = map(int, time_str.split(':'))
-        return d * 24 + h + m / 60
-    except Exception:
-        return 0
 
 def create_us_astronaut_map(df):
     """Create a US map showing astronaut count by state"""
@@ -184,7 +180,9 @@ def group_military_branches(branch):
     
     branch_lower = str(branch).lower()
     
-    if 'air force' in branch_lower:
+    if 'civilian' in branch_lower:
+        return 'Civilian'
+    elif 'air force' in branch_lower:
         return 'US Air Force'
     elif 'navy' in branch_lower or 'naval' in branch_lower:
         return 'US Navy'
@@ -372,8 +370,26 @@ def load_international_models():
         # Load the trained models
         models = load_trained_models()
         
-        # Load the processed international data
-        df = pd.read_csv('data/international_astronauts.csv')
+        # Try different possible paths for the international CSV file
+        possible_paths = [
+            '../data/international_astronauts.csv',  # From app/ directory to data/
+            'data/international_astronauts.csv',
+            'CDC-2025/data/international_astronauts.csv',
+            'international_astronauts.csv',
+            './international_astronauts.csv'
+        ]
+        
+        df = None
+        for path in possible_paths:
+            try:
+                df = pd.read_csv(path)
+                break
+            except FileNotFoundError:
+                continue
+        
+        if df is None:
+            st.error("Could not find international astronaut data file. Please check if international_astronauts.csv exists.")
+            return None, None, None, None, None, None, None
         
         # Create dummy objects to match the expected return format
         # For international model, we don't use traditional encoders
@@ -436,14 +452,14 @@ def find_similar_astronauts(user_encoded_features, df, encoders, input_categoric
     return similar_astronauts
 
 # --- Streamlit UI ---
-st.title("🚀 Astronaut Mission Predictor")
+st.title("Astronaut Mission Predictor 🚀")
 
 # Dataset selection
 st.markdown("---")
 col1, col2, col3 = st.columns([1, 2, 1])
 with col2:
     dataset_choice = st.selectbox(
-        "🌍 Choose Dataset:",
+        "Choose Dataset:",
         ["NASA/USA Astronauts", "International Astronauts"],
         help="Select which astronaut dataset to use for predictions and analysis"
     )
@@ -457,13 +473,18 @@ else:
 st.markdown("---")
 
 # Create tabs for different sections
-tab1, tab2, tab3, tab4 = st.tabs(["🚀 Mission Predictor", "🌍 Global Explorer", "📊 Statistics", "🎯 Model Performance"])
+tab1, tab2, tab3, tab4 = st.tabs(["🚀 Mission Predictor", "🌍 Visual Explorer", "📊 Statistics", "🎯 Model Performance"])
 
 with tab1:
     st.markdown("### Enter astronaut characteristics to predict flight time, missions, and find similar astronauts")
     
     # Load models and data
-    flight_time_model, mission_count_model, encoders, input_features, input_categorical, df, scaler = load_and_train(dataset_choice)
+    result = load_and_train(dataset_choice)
+    if result is None or result[0] is None:
+        st.error("❌ Failed to load models and data. Please check your data files and try again.")
+        st.stop()
+    
+    flight_time_model, mission_count_model, encoders, input_features, input_categorical, df, scaler = result
 
     # Create input form based on dataset choice
     if dataset_choice == "NASA/USA Astronauts":
@@ -485,11 +506,16 @@ with tab1:
         # Display training data range info
         min_birth_year = 1924
         max_birth_year = 1978
-        st.info(f"ℹ️ **Model Training Range**: This model was trained on astronauts born between {min_birth_year}-{max_birth_year}. Predictions outside this range may be unreliable.")
+        st.info(f" **Model Training Range**: This model was trained on astronauts born between {min_birth_year}-{max_birth_year}. Predictions outside this range may be unreliable.")
 
     else:
         # International input form
         col1, col2 = st.columns(2)
+        
+        # Check if data is loaded successfully
+        if df is None:
+            st.error("❌ International astronaut data could not be loaded. Please check the data files.")
+            st.stop()
         
         # Get unique countries and genders from international data
         intl_countries = sorted(df['country'].unique())
@@ -551,7 +577,8 @@ with tab1:
             # Make predictions using international model
             predictions = predict_international(country, gender, flight_time_model)
             predicted_missions = predictions['total_flights']
-            predicted_flight_time = predictions['total_time']
+            # Convert from minutes to hours for international data
+            predicted_flight_time = predictions['total_time'] / 60
         
         # Display predictions
         st.markdown("## 🚀 Prediction Results")
@@ -628,7 +655,11 @@ with tab2:
         
         # Load data if not already loaded
         if 'df' not in locals():
-            flight_time_model, mission_count_model, encoders, input_features, input_categorical, df, scaler = load_and_train(dataset_choice)
+            result = load_and_train(dataset_choice)
+            if result is None or result[0] is None:
+                st.error("❌ Failed to load NASA astronaut data.")
+                st.stop()
+            flight_time_model, mission_count_model, encoders, input_features, input_categorical, df, scaler = result
         
         if df is not None:
             # Create and display the US map
@@ -656,7 +687,7 @@ with tab2:
                     st.metric(f"Top State ({top_state['state']})", int(top_state['astronaut_count']))
                 
                 # Show top 10 states
-                st.markdown("### 🏆 Top 10 States by Astronaut Count")
+                st.markdown("### Top 10 States by Astronaut Count")
                 top_10 = state_counts.head(10)
                 
                 # Create a bar chart for top 10 states
@@ -674,52 +705,97 @@ with tab2:
                 st.plotly_chart(fig_bar, use_container_width=True)
                 
                 # Show detailed table
-                with st.expander("📊 View Detailed State Statistics"):
+                with st.expander("Detailed State Statistics"):
                     st.dataframe(state_counts, use_container_width=True)
         else:
             st.error("Could not load NASA astronaut data.")
     else:
-        # International dataset - different explorer
-        st.markdown("### 🌍 Global Astronaut Explorer")
-        st.markdown("Explore astronaut statistics by country and region!")
+        # International dataset - world map
+        st.markdown("### 🗺️ Global Astronaut Distribution Map")
+        st.markdown("Explore astronaut statistics by country around the world! "
+        "*US not included, see NASA/USA Astronauts tab for US distribution map.*")
         
         # Load data if not already loaded
         if 'df' not in locals():
-            flight_time_model, mission_count_model, encoders, input_features, input_categorical, df, scaler = load_and_train(dataset_choice)
+            result = load_and_train(dataset_choice)
+            if result is None or result[0] is None:
+                st.error("❌ Failed to load international astronaut data.")
+                st.stop()
+            flight_time_model, mission_count_model, encoders, input_features, input_categorical, df, scaler = result
         
-        # Country selector
-        st.markdown("### 🔍 Explore Country Details")
-        available_countries = sorted(df['country'].unique())
-        selected_country = st.selectbox(
-            "Select a country to view detailed astronaut information:",
-            options=[''] + available_countries,
-            key="country_selector"
-        )
-        
-        if selected_country:
-            country_data = df[df['country'] == selected_country]
-            if not country_data.empty:
-                st.markdown(f"## 🏴 {selected_country} - Astronaut Profile")
+        if df is not None and VISUAL_AVAILABLE:
+            # Create and display the world map
+            world_map_result = create_world_astronaut_map(df)
+            
+            if world_map_result is not None:
+                fig, country_stats = world_map_result
                 
+                # Display the map
+                st.plotly_chart(fig, use_container_width=True)
+                
+                # Display summary statistics
                 col1, col2, col3, col4 = st.columns(4)
-                with col1:
-                    st.metric("Total Astronauts", len(country_data))
-                with col2:
-                    st.metric("Total Flights", int(country_data['total_flights'].sum()))
-                with col3:
-                    st.metric("Total Hours", f"{country_data['total_time'].sum():,.0f}")
-                with col4:
-                    avg_flights = country_data['total_flights'].mean()
-                    st.metric("Avg Flights/Person", f"{avg_flights:.1f}")
                 
-                # Gender breakdown
-                gender_dist = country_data['gender'].value_counts()
-                st.markdown("**Gender Distribution:**")
-                for gender, count in gender_dist.items():
-                    percentage = (count / len(country_data)) * 100
-                    st.write(f"- **{gender}**: {count} astronauts ({percentage:.1f}%)")
+                with col1:
+                    total_astronauts = len(df)
+                    st.metric("Total Astronauts", total_astronauts)
+                
+                with col2:
+                    countries_represented = len(country_stats)
+                    st.metric("Countries Represented", countries_represented)
+                
+                with col3:
+                    top_country = country_stats.nlargest(1, 'Total_Astronauts').iloc[0]
+                    st.metric(f"Top Country", f"{top_country['Country']}")
+                
+                with col4:
+                    st.metric("Top Country Count", int(top_country['Total_Astronauts']))
+                
+                # Show top 10 countries
+                st.markdown("### Top 10 Countries by Astronaut Count")
+                top_10_countries = country_stats.nlargest(10, 'Total_Astronauts')
+                
+                # Create a bar chart for top 10 countries
+                fig_bar = px.bar(
+                    top_10_countries, 
+                    x='Total_Astronauts', 
+                    y='Country',
+                    orientation='h',
+                    title="Top 10 Countries",
+                    labels={'Total_Astronauts': 'Number of Astronauts', 'Country': 'Country'},
+                    color='Total_Astronauts',
+                    color_continuous_scale='Viridis'
+                )
+                fig_bar.update_layout(height=400, yaxis={'categoryorder':'total ascending'})
+                st.plotly_chart(fig_bar, use_container_width=True)
+                
+                # Show detailed table
+                with st.expander("Detailed Country Statistics"):
+                    # Display the original country names (not mapped ones)
+                    display_stats = country_stats.drop('Country_Map', axis=1, errors='ignore')
+                    st.dataframe(display_stats, use_container_width=True)
+        else:
+            if not VISUAL_AVAILABLE:
+                st.error("🚫 Visual components not available. World map cannot be displayed.")
             else:
-                st.warning(f"No data found for {selected_country}")
+                st.error("Could not load international astronaut data.")
+        
+        # Country selector for detailed view
+        if df is not None:
+            st.markdown("---")
+            st.markdown("### 🔍 Explore Country Details")
+            available_countries = sorted(df['country'].unique())
+            selected_country = st.selectbox(
+                "Select a country to view detailed astronaut information:",
+                options=[''] + available_countries,
+                key="country_selector_detailed"
+            )
+            
+            if selected_country and VISUAL_AVAILABLE:
+                country_data = df[df['country'] == selected_country]
+                if not country_data.empty:
+                    st.markdown(f"## 🏴 {selected_country} - Astronaut Profile")
+                    create_country_details_card(pd.DataFrame([{'Country': selected_country}]), df)
 
 with tab3:
     if dataset_choice == "NASA/USA Astronauts":
@@ -881,7 +957,18 @@ with tab4:
                 st.success("✅ **Models Loaded**: International astronaut models are ready")
                 
                 # Calculate performance metrics from the international data
-                intl_df = pd.read_csv('data/international_astronauts.csv')
+                # Try different possible paths for the international CSV file
+                intl_df = None
+                for path in ['../data/international_astronauts.csv', 'data/international_astronauts.csv']:
+                    try:
+                        intl_df = pd.read_csv(path)
+                        break
+                    except FileNotFoundError:
+                        continue
+                
+                if intl_df is None:
+                    st.warning("Could not load international data for metrics display")
+                    intl_df = pd.DataFrame({'country': ['Unknown'], 'gender': ['Unknown']})  # Dummy data
                 
                 col1, col2 = st.columns(2)
                 
@@ -949,5 +1036,5 @@ with tab4:
         - Smoothing prevents overfitting to small country samples
         """)
 
-    st.info("💡 **Key Insight**: Both models achieve meaningful predictive power despite the inherent complexity of human career trajectories in space exploration!")
+    
 

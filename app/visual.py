@@ -4,6 +4,204 @@ import plotly.graph_objects as go
 import plotly.express as px
 from collections import Counter
 
+def create_world_astronaut_map(df):
+    """
+    Create an interactive world map showing astronaut statistics by country
+    """
+    if df.empty:
+        st.warning("No international astronaut data found.")
+        return None, None
+    
+    # Calculate country statistics
+    country_stats = df.groupby('country').agg({
+        'Name': 'count',
+        'total_flights': 'sum',
+        'total_time': 'sum',
+        'gender': lambda x: Counter(x),
+    }).reset_index()
+    
+    # Rename columns for clarity
+    country_stats.columns = ['Country', 'Total_Astronauts', 'Total_Flights', 'Total_Time_Minutes', 'Gender_Dist']
+    
+    # Convert time to hours for better readability
+    country_stats['Total_Time_Hours'] = country_stats['Total_Time_Minutes'] / 60
+    
+    # Calculate averages
+    country_stats['Avg_Flights_Per_Astronaut'] = (country_stats['Total_Flights'] / country_stats['Total_Astronauts']).round(2)
+    country_stats['Avg_Time_Hours_Per_Astronaut'] = (country_stats['Total_Time_Hours'] / country_stats['Total_Astronauts']).round(1)
+    
+    # Country name mapping for plotly (some countries need to match plotly's country names)
+    country_mapping = {
+        'Soviet Union': 'Russia',  # Map Soviet Union to Russia for visualization
+        'East Germany': 'Germany',  # Map East Germany to Germany
+        'Czechoslovakia': 'Czech Republic',  # Map to Czech Republic
+        # Add more mappings as needed
+    }
+    
+    # Apply country mapping for the map visualization
+    country_stats['Country_Map'] = country_stats['Country'].replace(country_mapping)
+    
+    if country_stats.empty:
+        st.warning("No country data available for mapping.")
+        return None, country_stats
+    
+    # Create the world choropleth map
+    fig = px.choropleth(
+        country_stats,
+        locations='Country_Map',
+        locationmode='country names',
+        color='Total_Astronauts',
+        hover_name='Country',  # Show original country name
+        hover_data={
+            'Country_Map': False,  # Hide the mapped country name
+            'Total_Astronauts': ':.0f',
+            'Total_Flights': ':.0f',
+            'Total_Time_Hours': ':.1f',
+            'Avg_Flights_Per_Astronaut': ':.2f',
+            'Avg_Time_Hours_Per_Astronaut': ':.1f'
+        },
+        color_continuous_scale='Viridis',
+        range_color=[0, country_stats['Total_Astronauts'].max()],
+        title='Global Astronauts by Country',
+        labels={
+            'Total_Astronauts': 'Number of Astronauts',
+            'Country': 'Country',
+            'Total_Flights': 'Total Flights',
+            'Total_Time_Hours': 'Total Time (Hours)',
+            'Avg_Flights_Per_Astronaut': 'Avg Flights/Astronaut',
+            'Avg_Time_Hours_Per_Astronaut': 'Avg Hours/Astronaut'
+        }
+    )
+    
+    # Update layout for better interactivity and visual appeal
+    fig.update_layout(
+        title=dict(
+            text='International Astronaut Distribution by Country',
+            x=0.5,
+            font=dict(size=18)
+        ),
+        geo=dict(
+            showframe=False,
+            showcoastlines=True,
+            projection_type='natural earth',
+            bgcolor='rgba(0,0,0,0)'
+        ),
+        height=600,
+        width=1200,
+        coloraxis_colorbar=dict(
+            title="Number of Astronauts",
+            thickness=15,
+            len=0.7,
+            x=1.02
+        ),
+        margin=dict(l=0, r=50, t=80, b=0)
+    )
+    
+    # Enhance hover information
+    fig.update_traces(
+        hovertemplate='<b>%{hovertext}</b><br>' +
+                     'Astronauts: %{z}<br>' +
+                     'Total Flights: %{customdata[2]}<br>' +
+                     'Total Hours: %{customdata[3]:.1f}<br>' +
+                     'Avg Flights/Astronaut: %{customdata[4]:.2f}<br>' +
+                     'Avg Hours/Astronaut: %{customdata[5]:.1f}<br>' +
+                     '<extra></extra>',
+        customdata=country_stats[['Country_Map', 'Total_Astronauts', 'Total_Flights', 'Total_Time_Hours', 'Avg_Flights_Per_Astronaut', 'Avg_Time_Hours_Per_Astronaut']].values
+    )
+    
+    return fig, country_stats
+
+def create_country_details_card(country_data, df):
+    """
+    Create a detailed information card for a selected country
+    """
+    if country_data.empty:
+        return None
+    
+    country_name = country_data['Country'].iloc[0]
+    
+    # Get astronauts from this country
+    country_astronauts = df[df['country'] == country_name]
+    
+    if country_astronauts.empty:
+        st.warning(f"No astronaut data found for {country_name}")
+        return
+    
+    # Create metrics
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("Total Astronauts", len(country_astronauts))
+    
+    with col2:
+        total_flights = country_astronauts['total_flights'].sum()
+        st.metric("Total Flights", int(total_flights))
+    
+    with col3:
+        total_hours = country_astronauts['total_time'].sum() / 60  # Convert minutes to hours
+        st.metric("Total Flight Hours", f"{total_hours:.1f}")
+    
+    with col4:
+        avg_flights = total_flights / len(country_astronauts) if len(country_astronauts) > 0 else 0
+        st.metric("Avg Flights/Astronaut", f"{avg_flights:.2f}")
+    
+    # Show top astronauts from this country
+    st.markdown("### Top Astronauts")
+    top_astronauts = country_astronauts.nlargest(5, 'total_flights')[
+        ['Name', 'total_flights', 'total_time', 'gender', 'Flights']
+    ].copy()
+    
+    # Convert time to hours for display
+    top_astronauts['total_time_hours'] = (top_astronauts['total_time'] / 60).round(1)
+    top_astronauts = top_astronauts.drop('total_time', axis=1)
+    top_astronauts.columns = ['Name', 'Flights', 'Flight Hours', 'Gender', 'Missions']
+    
+    st.dataframe(top_astronauts, use_container_width=True)
+    
+    # Show distribution charts
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("### Gender Distribution")
+        gender_counts = country_astronauts['gender'].value_counts()
+        if not gender_counts.empty:
+            fig_gender = px.pie(
+                values=gender_counts.values,
+                names=gender_counts.index,
+                title=f"Gender Distribution - {country_name}",
+                color_discrete_sequence=['#1f77b4', '#ff7f0e', '#2ca02c']
+            )
+            st.plotly_chart(fig_gender, use_container_width=True)
+    
+    with col2:
+        st.markdown("### Flight Experience Distribution")
+        # Create flight experience categories
+        def categorize_flights(flights):
+            if flights == 1:
+                return "Single Flight"
+            elif flights <= 3:
+                return "2-3 Flights"
+            elif flights <= 5:
+                return "4-5 Flights"
+            else:
+                return "6+ Flights"
+        
+        country_astronauts_copy = country_astronauts.copy()
+        country_astronauts_copy['flight_category'] = country_astronauts_copy['total_flights'].apply(categorize_flights)
+        flight_dist = country_astronauts_copy['flight_category'].value_counts()
+        
+        if not flight_dist.empty:
+            fig_flights = px.bar(
+                x=flight_dist.values,
+                y=flight_dist.index,
+                orientation='h',
+                title=f"Flight Experience - {country_name}",
+                color=flight_dist.values,
+                color_continuous_scale='Blues'
+            )
+            fig_flights.update_layout(showlegend=False)
+            st.plotly_chart(fig_flights, use_container_width=True)
+
 def create_us_states_map(df):
     """
     Create an interactive US states map showing astronaut statistics by birth state
