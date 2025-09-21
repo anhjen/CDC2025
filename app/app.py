@@ -465,6 +465,10 @@ with tab1:
             predictions = predict_international(country, gender, flight_time_model)
             predicted_missions = predictions['total_flights']
             predicted_flight_time = predictions['total_time']
+            
+            # Convert minutes to hours for international model
+            if dataset_choice == "International Astronauts":
+                predicted_flight_time = predicted_flight_time / 60
         
         # Display predictions
         st.markdown("## 🚀 Prediction Results")
