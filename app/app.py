@@ -6,6 +6,7 @@ from sklearn.linear_model import Ridge, ElasticNet
 from sklearn.model_selection import train_test_split
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
+import plotly.express as px
 
 # Import our visual components conditionally
 try:
@@ -20,7 +21,7 @@ def load_international_performance():
     try:
         import joblib
         from pathlib import Path
-        models_dir = Path('../models')
+        models_dir = Path('models')
         
         if (models_dir / 'performance_metrics.joblib').exists():
             return joblib.load(models_dir / 'performance_metrics.joblib')
@@ -38,6 +39,92 @@ def ddd_hh_mm_to_hours(time_str):
         return d * 24 + h + m / 60
     except Exception:
         return 0
+
+def create_us_astronaut_map(df):
+    """Create a US map showing astronaut count by state"""
+    
+    # Filter for US astronauts
+    us_astronauts = df[df['country'] == 'United States'].copy() if 'country' in df.columns else df.copy()
+    
+    if us_astronauts.empty:
+        st.warning("No US astronaut data found.")
+        return None
+    
+    # Extract state from birth_place
+    def extract_state_abbreviation(birth_place):
+        if pd.isnull(birth_place):
+            return None
+        
+        # State name to abbreviation mapping
+        state_mapping = {
+            'Alabama': 'AL', 'Alaska': 'AK', 'Arizona': 'AZ', 'Arkansas': 'AR', 'California': 'CA',
+            'Colorado': 'CO', 'Connecticut': 'CT', 'Delaware': 'DE', 'Florida': 'FL', 'Georgia': 'GA',
+            'Hawaii': 'HI', 'Idaho': 'ID', 'Illinois': 'IL', 'Indiana': 'IN', 'Iowa': 'IA',
+            'Kansas': 'KS', 'Kentucky': 'KY', 'Louisiana': 'LA', 'Maine': 'ME', 'Maryland': 'MD',
+            'Massachusetts': 'MA', 'Michigan': 'MI', 'Minnesota': 'MN', 'Mississippi': 'MS', 'Missouri': 'MO',
+            'Montana': 'MT', 'Nebraska': 'NE', 'Nevada': 'NV', 'New Hampshire': 'NH', 'New Jersey': 'NJ',
+            'New Mexico': 'NM', 'New York': 'NY', 'North Carolina': 'NC', 'North Dakota': 'ND', 'Ohio': 'OH',
+            'Oklahoma': 'OK', 'Oregon': 'OR', 'Pennsylvania': 'PA', 'Rhode Island': 'RI', 'South Carolina': 'SC',
+            'South Dakota': 'SD', 'Tennessee': 'TN', 'Texas': 'TX', 'Utah': 'UT', 'Vermont': 'VT',
+            'Virginia': 'VA', 'Washington': 'WA', 'West Virginia': 'WV', 'Wisconsin': 'WI', 'Wyoming': 'WY',
+            'District of Columbia': 'DC'
+        }
+        
+        birth_place_str = str(birth_place).strip()
+        
+        # Check if it's already an abbreviation
+        if birth_place_str.upper() in state_mapping.values():
+            return birth_place_str.upper()
+        
+        # Check if it contains a state name
+        for state_name, abbreviation in state_mapping.items():
+            if state_name.lower() in birth_place_str.lower():
+                return abbreviation
+        
+        # Try to extract common patterns like "City, ST" or "City, State"
+        if ',' in birth_place_str:
+            parts = birth_place_str.split(',')
+            if len(parts) >= 2:
+                state_part = parts[-1].strip()
+                if state_part.upper() in state_mapping.values():
+                    return state_part.upper()
+                for state_name, abbreviation in state_mapping.items():
+                    if state_name.lower() == state_part.lower():
+                        return abbreviation
+        
+        return None
+    
+    # Extract state abbreviations
+    us_astronauts['state'] = us_astronauts['birth_place'].apply(extract_state_abbreviation)
+    
+    # Count astronauts by state
+    state_counts = us_astronauts[us_astronauts['state'].notna()]['state'].value_counts().reset_index()
+    state_counts.columns = ['state', 'astronaut_count']
+    
+    if state_counts.empty:
+        st.warning("No state data could be extracted from birth places.")
+        return None
+    
+    # Create the choropleth map
+    fig = px.choropleth(
+        state_counts,
+        locations='state',
+        locationmode='USA-states',
+        color='astronaut_count',
+        color_continuous_scale="Viridis",
+        scope="usa",
+        labels={'astronaut_count': 'Number of Astronauts'},
+        title='US Astronauts by Birth State',
+        hover_data={'state': True, 'astronaut_count': True}
+    )
+    
+    fig.update_layout(
+        title_x=0.5,
+        title_font_size=16,
+        height=500
+    )
+    
+    return fig, state_counts
 
 # --- Function to group similar majors ---
 def group_majors(major):
@@ -286,7 +373,7 @@ def load_international_models():
         models = load_trained_models()
         
         # Load the processed international data
-        df = pd.read_csv('../data/international_astronauts.csv')
+        df = pd.read_csv('data/international_astronauts.csv')
         
         # Create dummy objects to match the expected return format
         # For international model, we don't use traditional encoders
@@ -405,13 +492,8 @@ with tab1:
         col1, col2 = st.columns(2)
         
         # Get unique countries and genders from international data
-        if df is not None:
-            intl_countries = sorted(df['country'].unique())
-            intl_genders = sorted(df['gender'].unique())
-        else:
-            st.error("❌ International data could not be loaded. Please check that the data files are accessible.")
-            intl_countries = ['Unknown']
-            intl_genders = ['Unknown']
+        intl_countries = sorted(df['country'].unique())
+        intl_genders = sorted(df['gender'].unique())
         
         with col1:
             country = st.selectbox('Country', intl_countries, 
@@ -470,10 +552,6 @@ with tab1:
             predictions = predict_international(country, gender, flight_time_model)
             predicted_missions = predictions['total_flights']
             predicted_flight_time = predictions['total_time']
-            
-            # Convert minutes to hours for international model
-            if dataset_choice == "International Astronauts":
-                predicted_flight_time = predicted_flight_time / 60
         
         # Display predictions
         st.markdown("## 🚀 Prediction Results")
@@ -545,7 +623,61 @@ with tab1:
 
 with tab2:
     if dataset_choice == "NASA/USA Astronauts":
-        st.markdown("### Coming Soon")
+        st.markdown("### 🗺️ US Astronaut Distribution Map")
+        st.markdown("Explore where NASA astronauts were born across the United States!")
+        
+        # Load data if not already loaded
+        if 'df' not in locals():
+            flight_time_model, mission_count_model, encoders, input_features, input_categorical, df, scaler = load_and_train(dataset_choice)
+        
+        if df is not None:
+            # Create and display the US map
+            map_result = create_us_astronaut_map(df)
+            
+            if map_result is not None:
+                fig, state_counts = map_result
+                
+                # Display the map
+                st.plotly_chart(fig, use_container_width=True)
+                
+                # Display summary statistics
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    total_astronauts = state_counts['astronaut_count'].sum()
+                    st.metric("Total US Astronauts", total_astronauts)
+                
+                with col2:
+                    states_represented = len(state_counts)
+                    st.metric("States Represented", states_represented)
+                
+                with col3:
+                    top_state = state_counts.iloc[0]
+                    st.metric(f"Top State ({top_state['state']})", int(top_state['astronaut_count']))
+                
+                # Show top 10 states
+                st.markdown("### 🏆 Top 10 States by Astronaut Count")
+                top_10 = state_counts.head(10)
+                
+                # Create a bar chart for top 10 states
+                fig_bar = px.bar(
+                    top_10, 
+                    x='astronaut_count', 
+                    y='state',
+                    orientation='h',
+                    title="Top 10 States",
+                    labels={'astronaut_count': 'Number of Astronauts', 'state': 'State'},
+                    color='astronaut_count',
+                    color_continuous_scale='Viridis'
+                )
+                fig_bar.update_layout(height=400, yaxis={'categoryorder':'total ascending'})
+                st.plotly_chart(fig_bar, use_container_width=True)
+                
+                # Show detailed table
+                with st.expander("📊 View Detailed State Statistics"):
+                    st.dataframe(state_counts, use_container_width=True)
+        else:
+            st.error("Could not load NASA astronaut data.")
     else:
         # International dataset - different explorer
         st.markdown("### 🌍 Global Astronaut Explorer")
@@ -742,14 +874,14 @@ with tab4:
         try:
             import joblib
             from pathlib import Path
-            models_dir = Path('../models')
+            models_dir = Path('models')
             
             # Check if models exist
             if (models_dir / 'total_flights_priors.joblib').exists():
                 st.success("✅ **Models Loaded**: International astronaut models are ready")
                 
                 # Calculate performance metrics from the international data
-                intl_df = pd.read_csv('../data/international_astronauts.csv')
+                intl_df = pd.read_csv('data/international_astronauts.csv')
                 
                 col1, col2 = st.columns(2)
                 
