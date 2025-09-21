@@ -1,4 +1,5 @@
 import streamlit as st
+# machine learning and data visualization libaries
 import pandas as pd
 from sklearn.preprocessing import LabelEncoder
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
@@ -8,7 +9,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 import plotly.express as px
 
-# conditional imports
+# conditional imports, if functions/files are missing, app will disable features
 try:
     from visual import (
         create_us_states_map, 
@@ -22,8 +23,8 @@ except ImportError as e:
     st.warning(f"Visual components not available: {e}")
     VISUAL_AVAILABLE = False
 
+# loads international performance
 def load_international_performance():
-    """international model performance metrics."""
     try:
         import joblib
         from pathlib import Path
@@ -36,9 +37,8 @@ def load_international_performance():
     except Exception:
         return None
 
+# creates an interactive map that shows the number of astronauts by US State
 def create_us_astronaut_map(df):
-    """Create a US map showing astronaut count by state"""
-    
     # Filter for US astronauts
     us_astronauts = df[df['country'] == 'United States'].copy() if 'country' in df.columns else df.copy()
     
@@ -46,12 +46,12 @@ def create_us_astronaut_map(df):
         st.warning("No US astronaut data found.")
         return None
     
-    # Extract state from birth_place
+    # extract state from birth_place for readability
     def extract_state_abbreviation(birth_place):
         if pd.isnull(birth_place):
             return None
         
-        # State name to abbreviation mapping
+        # tate name to abbreviation mapping
         state_mapping = {
             'Alabama': 'AL', 'Alaska': 'AK', 'Arizona': 'AZ', 'Arkansas': 'AR', 'California': 'CA',
             'Colorado': 'CO', 'Connecticut': 'CT', 'Delaware': 'DE', 'Florida': 'FL', 'Georgia': 'GA',
@@ -122,7 +122,7 @@ def create_us_astronaut_map(df):
     
     return fig, state_counts
 
-# --- Function to group similar majors ---
+# group majors together for convenience 
 def group_majors(major):
     if pd.isnull(major) or major == '0':
         return 'Unknown'
@@ -173,7 +173,7 @@ def group_majors(major):
     else:
         return 'Other'
 
-# --- Function to group military branches ---
+# groups military branches
 def group_military_branches(branch):
     if pd.isnull(branch) or branch == '0':
         return 'Civilian'
@@ -194,7 +194,7 @@ def group_military_branches(branch):
         return 'US Coast Guard'
     else:
         return 'Other Military'
-# --- Utility function to convert hours back to ddd:hh:mm format ---
+# not needed anymore
 def hours_to_ddd_hh_mm(hours):
     if hours == 0:
         return "000:00:00"
@@ -203,7 +203,7 @@ def hours_to_ddd_hh_mm(hours):
     minutes = int((hours % 1) * 60)
     return f"{days:03d}:{remaining_hours:02d}:{minutes:02d}"
 
-# --- Load and preprocess data ---
+# load and process data 
 @st.cache_data
 def load_and_train(dataset_type="NASA/USA Astronauts"):
     if dataset_type == "International Astronauts":
@@ -213,7 +213,6 @@ def load_and_train(dataset_type="NASA/USA Astronauts"):
 
 @st.cache_data 
 def load_nasa_models():
-    # Try different possible paths for the CSV file (updated to use new dataset)
     possible_paths = [
         '../data/nasa_master_clean.csv',  # From app/ directory to data/
         'data/nasa_master_clean.csv',
