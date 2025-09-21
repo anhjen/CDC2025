@@ -570,7 +570,8 @@ with tab2:
                 with col2:
                     st.metric("Total Flights", int(country_data['total_flights'].sum()))
                 with col3:
-                    st.metric("Total Hours", f"{country_data['total_time'].sum():,.0f}")
+                    total_hours = country_data['total_time'].sum() / 60
+                    st.metric("Total Hours", f"{total_hours:,.1f}")
                 with col4:
                     avg_flights = country_data['total_flights'].mean()
                     st.metric("Avg Flights/Person", f"{avg_flights:.1f}")
@@ -615,7 +616,8 @@ with tab3:
         with col3:
             st.metric("Average Flights", f"{df['total_flights'].mean():.2f}")
         with col4:
-            st.metric("Total Flight Hours", f"{df['total_time'].sum():,.0f}")
+            total_hours = df['total_time'].sum() / 60
+            st.metric("Total Flight Hours", f"{total_hours:,.1f}")
         
         # Gender distribution
         st.markdown("#### 👨‍🚀 Gender Distribution")
