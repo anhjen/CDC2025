@@ -828,7 +828,8 @@ with tab3:
         with col3:
             st.metric("Average Flights", f"{df['total_flights'].mean():.2f}")
         with col4:
-            st.metric("Total Flight Hours", f"{df['total_time'].sum():,.0f}")
+            total_hours = df['total_time'].sum() / 60
+            st.metric("Total Flight Hours", f"{total_hours:,.1f}")
         
         # Gender distribution
         st.markdown("#### 👨‍🚀 Gender Distribution")
