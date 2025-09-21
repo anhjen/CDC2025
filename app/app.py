@@ -20,7 +20,7 @@ def load_international_performance():
     try:
         import joblib
         from pathlib import Path
-        models_dir = Path('models')
+        models_dir = Path('../models')
         
         if (models_dir / 'performance_metrics.joblib').exists():
             return joblib.load(models_dir / 'performance_metrics.joblib')
@@ -286,7 +286,7 @@ def load_international_models():
         models = load_trained_models()
         
         # Load the processed international data
-        df = pd.read_csv('data/international_astronauts.csv')
+        df = pd.read_csv('../data/international_astronauts.csv')
         
         # Create dummy objects to match the expected return format
         # For international model, we don't use traditional encoders
@@ -405,8 +405,13 @@ with tab1:
         col1, col2 = st.columns(2)
         
         # Get unique countries and genders from international data
-        intl_countries = sorted(df['country'].unique())
-        intl_genders = sorted(df['gender'].unique())
+        if df is not None:
+            intl_countries = sorted(df['country'].unique())
+            intl_genders = sorted(df['gender'].unique())
+        else:
+            st.error("❌ International data could not be loaded. Please check that the data files are accessible.")
+            intl_countries = ['Unknown']
+            intl_genders = ['Unknown']
         
         with col1:
             country = st.selectbox('Country', intl_countries, 
@@ -733,14 +738,14 @@ with tab4:
         try:
             import joblib
             from pathlib import Path
-            models_dir = Path('models')
+            models_dir = Path('../models')
             
             # Check if models exist
             if (models_dir / 'total_flights_priors.joblib').exists():
                 st.success("✅ **Models Loaded**: International astronaut models are ready")
                 
                 # Calculate performance metrics from the international data
-                intl_df = pd.read_csv('data/international_astronauts.csv')
+                intl_df = pd.read_csv('../data/international_astronauts.csv')
                 
                 col1, col2 = st.columns(2)
                 
