@@ -286,7 +286,7 @@ def load_international_models():
         models = load_trained_models()
         
         # Load the processed international data
-        df = pd.read_csv('../data/international_astronauts.csv')
+        df = pd.read_csv('data/international_astronauts.csv')
         
         # Create dummy objects to match the expected return format
         # For international model, we don't use traditional encoders
@@ -375,49 +375,6 @@ tab1, tab2, tab3, tab4 = st.tabs(["🚀 Mission Predictor", "🌍 Global Explore
 with tab1:
     st.markdown("### Enter astronaut characteristics to predict flight time, missions, and find similar astronauts")
     
-    # Add model information
-    with st.expander("ℹ️ About This Model & Data", expanded=False):
-        st.markdown("""
-        **Model Details:**
-        - **Training Data**: NASA Master Clean dataset (249 astronauts, 1924-1978 birth years)
-        - **Algorithm**: Random Forest Regression
-        - **Key Features**: Birth place (39.9% importance), Birth year (37.9% importance)
-        
-        **⚠️ Important Data Context:**
-        - **Modern Era (1960-1980)**: Avg 210 days flight time (ISS long-duration missions)
-        - **Shuttle Era (1940-1960)**: Avg 57 days flight time (Space Shuttle missions)  
-        - **Apollo Era (1920-1940)**: Avg 23 days flight time (Apollo missions)
-        
-        **High Predictions Explained**: The model reflects the reality that modern astronauts 
-        (ISS era) stay in space for 6+ month missions, while earlier astronauts had shorter missions.
-        
-        **Best Results**: Use birth years between 1924-1978 for most accurate predictions.
-        **Data Source**: nasa_master_clean.csv
-        """)
-    
-    # Add mission type selector
-    st.markdown("### 🚀 Mission Type Context")
-    mission_context = st.selectbox(
-        "What type of mission are you predicting for?",
-        [
-            "Modern ISS-style missions (6+ months in space)",
-            "Space Shuttle era missions (1-2 weeks)", 
-            "Apollo era missions (1-2 weeks)",
-            "Mixed/Average career"
-        ],
-        index=3,
-        help="This helps interpret the predictions in context"
-    )
-    
-    if mission_context == "Space Shuttle era missions (1-2 weeks)":
-        st.info("💡 **Context**: For Shuttle-era style missions, expect predictions of 1-4 weeks (168-672 hours)")
-    elif mission_context == "Apollo era missions (1-2 weeks)":
-        st.info("💡 **Context**: For Apollo-era style missions, expect predictions of 1-2 weeks (168-336 hours)")
-    elif mission_context == "Modern ISS-style missions (6+ months in space)":
-        st.info("💡 **Context**: For ISS-era missions, predictions of 3-12 months (2000-8000+ hours) are normal")
-    else:
-        st.info("💡 **Context**: Predictions show total career flight time across all missions")
-
     # Load models and data
     flight_time_model, mission_count_model, encoders, input_features, input_categorical, df, scaler = load_and_train(dataset_choice)
 
@@ -576,104 +533,10 @@ with tab1:
                         st.write(f"**Birth Place:** {astronaut['Birth_Place']}")
 
     st.markdown("---")
-    st.markdown("#### Dataset Sample")
-    
-    if dataset_choice == "NASA/USA Astronauts":
-        # NASA dataset display
-        possible_cols = ['Name', 'country', 'gender', 'Total Flights', 'birth_place', 'undergraduate_major']
-        display_cols = [col for col in possible_cols if col in df.columns]
-        
-        if display_cols:
-            df_display = df[display_cols].copy()
-            if 'Flight_Time_Hours' in df.columns:
-                df_display['Flight_Time_Display'] = df['Flight_Time_Hours'].apply(hours_to_ddd_hh_mm)
-                df_display = df_display[display_cols + ['Flight_Time_Display']]
-            st.dataframe(df_display.head(10))
-        else:
-            st.write("NASA dataset columns available:", list(df.columns))
-    else:
-        # International dataset display
-        if 'country' in df.columns and 'gender' in df.columns:
-            display_cols = ['country', 'gender', 'total_flights', 'total_time']
-            df_display = df[display_cols].copy()
-            df_display['total_time_formatted'] = df_display['total_time'].apply(lambda x: f"{x:.0f} hours")
-            df_display = df_display[['country', 'gender', 'total_flights', 'total_time_formatted']]
-            st.dataframe(df_display.head(10))
-        else:
-            st.write("International dataset columns available:", list(df.columns))
 
 with tab2:
     if dataset_choice == "NASA/USA Astronauts":
-        st.markdown("### 🏴🇺🇸 Interactive US States Astronaut Explorer")
-        st.markdown("Click on states in the map below to explore astronaut statistics by birth state!")
-        
-        # Load data for the map (reuse the loaded data)
-        if 'df' not in locals():
-            flight_time_model, mission_count_model, encoders, input_features, input_categorical, df, scaler = load_and_train(dataset_choice)
-        
-        # Create and display the interactive US states map
-        if VISUAL_AVAILABLE:
-            states_fig, state_stats = create_us_states_map(df)
-        else:
-            states_fig, state_stats = None, None
-        
-        if states_fig is not None:
-            st.plotly_chart(states_fig, use_container_width=True)
-            
-            # State selection dropdown
-            st.markdown("### 🔍 Explore State Details")
-            available_states = sorted([state for state in state_stats['State'].unique() if state != 'Unknown'])
-            selected_state = st.selectbox(
-                "Select a US state to view detailed astronaut information:",
-                options=[''] + available_states,
-                key="state_selector"
-            )
-            
-            if selected_state:
-                state_data = state_stats[state_stats['State'] == selected_state]
-                if not state_data.empty:
-                    st.markdown(f"## 🏴 {selected_state} - Astronaut Profile")
-                    if VISUAL_AVAILABLE:
-                        create_state_details_card(state_data, df)
-                    else:
-                        st.error("State details not available")
-                else:
-                    st.warning(f"No data found for {selected_state}")
-            
-            # Show state comparison
-            st.markdown("### 🏆 State Comparison")
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                states_to_compare = st.multiselect(
-                    "Select states to compare:",
-                    options=available_states,
-                    default=['Texas', 'California'] if all(state in available_states for state in ['Texas', 'California']) else [],
-                    max_selections=5
-                )
-            
-            if states_to_compare:
-                comparison_data = state_stats[state_stats['State'].isin(states_to_compare)]
-                
-                with col2:
-                    comparison_metric = st.selectbox(
-                        "Compare by:",
-                        options=['Total_Astronauts', 'Total_Flights', 'Total_Flight_Hours', 'Avg_Flights_Per_Astronaut']
-                    )
-                
-                if not comparison_data.empty:
-                    import plotly.express as px
-                    fig_comparison = px.bar(
-                        comparison_data,
-                        x='State',
-                        y=comparison_metric,
-                        title=f"State Comparison: {comparison_metric.replace('_', ' ')}",
-                        color=comparison_metric,
-                        color_continuous_scale='viridis'
-                    )
-                    st.plotly_chart(fig_comparison, use_container_width=True)
-        else:
-            st.error("Unable to create US states map. Please check the data.")
+        st.markdown("### Coming Soon")
     else:
         # International dataset - different explorer
         st.markdown("### 🌍 Global Astronaut Explorer")
@@ -682,21 +545,6 @@ with tab2:
         # Load data if not already loaded
         if 'df' not in locals():
             flight_time_model, mission_count_model, encoders, input_features, input_categorical, df, scaler = load_and_train(dataset_choice)
-        
-        # Show top countries
-        st.markdown("#### 🏆 Top Space-Faring Nations")
-        country_counts = df['country'].value_counts().head(15)
-        
-        import plotly.express as px
-        fig_countries = px.bar(
-            x=country_counts.values,
-            y=country_counts.index,
-            orientation='h',
-            title="Number of Astronauts by Country",
-            labels={'x': 'Number of Astronauts', 'y': 'Country'}
-        )
-        fig_countries.update_layout(height=500)
-        st.plotly_chart(fig_countries, use_container_width=True)
         
         # Country selector
         st.markdown("### 🔍 Explore Country Details")
@@ -746,7 +594,7 @@ with tab3:
         else:
             st.error("🚫 Visual components not available. Statistics cannot be displayed.")
     else:
-        st.markdown("### 📊 International Astronaut Statistics")
+        st.markdown("### 📊 International Astronaut Statistics (Excluding US)")
         
         # Load data if not already loaded
         if 'df' not in locals():
@@ -790,10 +638,10 @@ with tab3:
             st.bar_chart(flight_dist)
         with col2:
             st.write("**Flight Time Statistics:**")
-            st.write(f"- **Minimum**: {df['total_time'].min():.0f} hours")
-            st.write(f"- **Maximum**: {df['total_time'].max():,.0f} hours")
-            st.write(f"- **Average**: {df['total_time'].mean():.0f} hours")
-            st.write(f"- **Median**: {df['total_time'].median():.0f} hours")
+            st.write(f"- **Minimum**: {(df['total_time'].min()/60):.0f} hours")
+            st.write(f"- **Maximum**: {(df['total_time'].max()/60):,.0f} hours")
+            st.write(f"- **Average**: {(df['total_time'].mean()/60):.0f} hours")
+            st.write(f"- **Median**: {(df['total_time'].median()/60):.0f} hours")
 
 with tab4:
     st.markdown("### 🎯 Model Performance Metrics")
@@ -892,7 +740,7 @@ with tab4:
                 st.success("✅ **Models Loaded**: International astronaut models are ready")
                 
                 # Calculate performance metrics from the international data
-                intl_df = pd.read_csv('../data/international_astronauts.csv')
+                intl_df = pd.read_csv('data/international_astronauts.csv')
                 
                 col1, col2 = st.columns(2)
                 

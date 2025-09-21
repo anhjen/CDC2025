@@ -8,7 +8,7 @@ from pathlib import Path
 
 def load_data():
     """Load and preprocess the international astronauts data."""
-    df = pd.read_csv('../data/international_astronauts.csv')
+    df = pd.read_csv('data/international_astronauts.csv')
     return df
 
 def compute_smoothed_priors(df, group_cols, target_col, alpha=1.0):
